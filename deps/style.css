@@ -1,0 +1,25 @@
+html,
+body {
+	width: 100vw;
+	height: 100vh;
+	background-color: black;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: stretch;
+}
+
+#nav {
+	padding: 1em;
+	width: 100vw;
+	height: 10vh;
+	display: flex;
+	flex-direction: row;
+	align-items: baseline;
+	gap: 1em;
+}
+
+#map {
+	width: 100vw;
+	height: 90vh;
+}

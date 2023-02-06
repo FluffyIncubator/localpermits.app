@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>LocalPermits.app - Get the lead out Philly!</title>
+
+	<link rel="stylesheet" href="./bulma.min.css">
+	<link rel="stylesheet" href="./style.css">
+
+	<script src="./react.production.min.js"></script>
+	<script src="./react-dom.production.min.js"></script>
+	<script src="./typescriptServices.js"></script>
+	<style type="text/css">
+		html,
+		body {
+			background-color: black;
+			color: #666;
+		}
+	</style>
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+		integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+		crossorigin="">
+	<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
+		integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
+		crossOrigin=""></script>
+
+</head>
+
+<body>
+	<div id="head"></div>
+	<div id="root"></div>
+
+	<script id="tsx" type="text/tsx">
+		const useState = React.useState;
+		const useContext = React.useContext;
+		const useRef = React.useRef;
+		const useEffect = React.useEffect;
+		
+		/*{{tsx}}*/
+
+		window.addEventListener('DOMContentLoaded', () => {
+			const headRoot = ReactDOM.createRoot(document.getElementById('head'), null);
+			headRoot.render(
+				<Head />
+			)
+
+			const container = document.getElementById('root');
+			const root = ReactDOM.createRoot(container, null);
+			root.render(
+				<Main />
+			)
+		});
+	</script>
+
+	<script id="builder" type="text/javascript">
+		var tsxElement = document.getElementById('tsx');
+		var tsxCode = tsxElement.innerText;
+
+		var jsCode = window.ts.transpile(tsxCode, { jsx: "react", module: "ESNext", target: "ESNext", removeComments: true });
+
+		jsCode = jsCode.replaceAll(/^(import.*)$/img, '')
+		jsCode = jsCode.replaceAll(/^export default/img, "")
+		jsCode = jsCode.replaceAll(/^export/img, "")
+		jsCode = jsCode.replaceAll(/\n\n/img, '\n');
+
+		var script = document.createElement('script');
+		script.type = 'text/javascript';
+		script.innerText = jsCode;
+		document.head.appendChild(script);
+
+		tsxElement.parentElement.removeChild(tsxElement);
+	</script>
+
+</body>
+
+</html>
