@@ -30,23 +30,14 @@
 </head>
 
 <body>
-	<div id="head"></div>
 	<div id="root"></div>
 
 	<script id="tsx" type="text/tsx">
-		const useState = React.useState;
-		const useContext = React.useContext;
-		const useRef = React.useRef;
-		const useEffect = React.useEffect;
+		const {useState , useContext, useRef, useEffect, createContext } = React;
 		
-		/*{{tsx}}*/
+		${CONTENT}
 
 		window.addEventListener('DOMContentLoaded', () => {
-			const headRoot = ReactDOM.createRoot(document.getElementById('head'), null);
-			headRoot.render(
-				<Head />
-			)
-
 			const container = document.getElementById('root');
 			const root = ReactDOM.createRoot(container, null);
 			root.render(

@@ -30,33 +30,329 @@
 </head>
 
 <body>
-	<div id="head"></div>
 	<div id="root"></div>
 
 	<script id="tsx" type="text/tsx">
-		const useState = React.useState;
-		const useContext = React.useContext;
-		const useRef = React.useRef;
-		const useEffect = React.useEffect;
+		const {useState , useContext, useRef, useEffect, createContext } = React;
 		
-		import React from 'react';
+		
 
-export default function Head() {
+import React, { ReactElement, useEffect, useState } from 'react';
+
+interface ModalProps {
+	title: string;
+	children?: ReactElement | ReactElement[];
+	isOpen?: boolean;
+	onClose?: () => void;
+}
+
+export default function Modal(props: ModalProps) {
+	const [isOpen, setIsOpen] = useState(false);
+
+	useEffect(() => {
+		if (typeof props.isOpen !== 'undefined') setIsOpen(props.isOpen);
+	}, [props]);
+
 	return (
-		<></>
+		<>
+			{isOpen &&
+				<div className='modal'>
+					<div className='modal-window'>
+						<header className='modal-head'>
+							<h2 className='title is-size-5'>{props.title}</h2>
+							{props.onClose &&
+								<button className='button is-size-7' onClick={props.onClose}>close</button>}
+						</header>
+						<div className='modal-body'>
+							{props.children}
+						</div>
+					</div>
+				</div>}
+		</>
 	)
 }
 
+export class Api {
+	private _sessionId:string = "";
+	get sessionId() {
+		return this._sessionId;
+	}
+	set sessionId(newValue: string) {
+		localStorage.setItem('api-session-id', newValue);
+		this._sessionId = newValue;
+	}
+
+	private _phoneNumber = "";
+	get phoneNumber() {
+		return this._phoneNumber;
+	}
+	set phoneNumber(newPhone: string) {
+		localStorage.setItem('api-phone-number', newPhone);
+		this._phoneNumber = newPhone;
+	}
+
+	constructor() {
+		let storedSessionId = localStorage.getItem('api-session-id');
+		if (storedSessionId) {
+			this._sessionId = storedSessionId;
+		}
+
+		let storedPhone = localStorage.getItem('api-phone-number');
+		if (storedPhone) {
+			this._phoneNumber = storedPhone;
+		}
+
+		console.log(this);
+	}
+
+	async requestCode(phoneNumber: string): Promise<boolean> {
+		this.phoneNumber = phoneNumber;
+
+		let result = await fetch('/auth/getcode', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'Application/JSON'
+			},
+			body: JSON.stringify({
+				phone_number: phoneNumber
+			})
+		})
+		let data = await result.json();
+
+		return data.status && data.status == 'sent';
+	}
+
+	async checkCode(code: string): Promise<boolean> {
+		let result = await fetch('/auth/checkcode', {
+			method: 'POST',
+			headers: {
+				'Content-Type': "Application/JSON"
+			},
+			body: JSON.stringify({
+				phone_number: this.phoneNumber,
+				code: code
+			})
+		});
+		let data = await result.json();
+		if (data.id) {
+			this.sessionId = data.id;
+			return true;
+		}
+		return false;
+	}
+
+	logOut() {
+		this.sessionId = '';
+		this.phoneNumber = '';
+	}
+}
+
+import { createContext } from "react";
+import { Api } from "./Api";
+
+export var ApiContext = createContext(new Api())
+
 import React from 'react';
+import { Api } from './Api';
+import { ApiContext } from './ApiContext';
 import Map from './Map';
 import Nav from './Nav';
 
 export default function Main() {
 	return (
 		<div className='main'>
-			<Nav></Nav>
-			<Map></Map>
+			<ApiContext.Provider value={new Api()}>
+				<Nav></Nav>
+				<Map></Map>
+			</ApiContext.Provider>
 		</div>
+	)
+}
+
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { ApiContext } from './ApiContext';
+import ManageAlerts from './ManageAlerts';
+import Modal from './Modal';
+
+const STAGE_REQUEST_CODE = 0;
+const STAGE_ENTER_CODE = 1;
+const STAGE_VERIFY_CODE = 2;
+const STAGE_SIGNED_IN = 3;
+
+export default function Menu() {
+	const apiContext = useContext(ApiContext);
+
+	const initialLoadRef = useRef(true);
+	const phoneNumberRef = useRef<HTMLInputElement>(null);
+	const codeRef = useRef<HTMLInputElement>(null);
+
+	const [stage, setStage] = useState(STAGE_REQUEST_CODE);
+	const [phoneNumber, setPhoneNumber] = useState("");
+	const [isLoading, setIsLoading] = useState(false);
+	const [isModalOpen, setIsModalOpen] = useState(false);
+	const [isManageAlertsOpen, setIsManageAlertsOpen] = useState(false);
+
+	useEffect(() => {
+		if (initialLoadRef.current) {
+			initialLoadRef.current = false;
+
+			if (apiContext.phoneNumber) {
+				setPhoneNumber(apiContext.phoneNumber);
+			}
+
+			if (apiContext.sessionId) {
+				setStage(STAGE_SIGNED_IN);
+			}
+		}
+	})
+
+	const getCode = async () => {
+		setIsLoading(true);
+
+		if (phoneNumberRef.current) {
+			let phoneNumber = phoneNumberRef.current.value.replace(/[^0-9]*/ig, '');
+
+			if (phoneNumber.length !== 10) {
+				alert("Please provide a phone number that is 10 digits. It must be a US mobile number that can receive text messages.");
+				setIsLoading(false);
+				return;
+			}
+
+			setPhoneNumber(phoneNumber);
+
+			let result = await apiContext.requestCode(phoneNumber);
+			if (result) {
+				setStage(STAGE_ENTER_CODE);
+			} else {
+				alert('There was a problem requesting a code. Please try again later.');
+			}
+		}
+
+		setIsLoading(false);
+	}
+
+	const checkCode = async () => {
+		if (!codeRef.current) return;
+
+		setIsLoading(true);
+
+		setStage(STAGE_VERIFY_CODE);
+
+		let code = codeRef.current.value.replace(/[^0-9]*/ig, '');
+		if (code.length !== 6) {
+			alert('That is not a valid code');
+			setStage(STAGE_ENTER_CODE);
+			setIsLoading(false);
+			return;
+		}
+
+		let result = await apiContext.checkCode(code);
+		if (result) {
+			setStage(STAGE_SIGNED_IN);
+			setIsLoading(false);
+			return;
+		}
+
+		alert("Something went wrong. Please try again in a little while.");
+		setStage(STAGE_REQUEST_CODE);
+		setIsLoading(false);
+	}
+
+	const startOver = () => {
+		apiContext.logOut();
+		setPhoneNumber('');
+		setStage(STAGE_REQUEST_CODE);
+		setIsLoading(false);
+	}
+
+	const manageAlerts = () => {
+		setIsManageAlertsOpen(true);
+	}
+
+	const signOut = () => {
+		if (confirm("Are you sure you want to sign out?")) {
+			startOver();
+		}
+	}
+
+	return (
+		<>
+			<button className='button' onClick={() => setIsModalOpen(true)}>{apiContext.phoneNumber ? apiContext.phoneNumber : 'Sign In'}</button>
+			<Modal title='My Account' isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+				<>
+					{stage == STAGE_REQUEST_CODE &&
+						<>
+							<p>If you sign in with a mobile number you can set an alert to be texted when a new permit for demolition appears within a half mile of your home.</p>
+							<p>Obviously, texting fees may apply!</p>
+							<div className='sign-in-form'>
+								<input ref={phoneNumberRef} type='tel' className='input' placeholder='Mobile number' disabled={isLoading} />
+								<button className='button' onClick={getCode} disabled={isLoading}>Send Code</button>
+							</div>
+						</>}
+				</>
+				<>
+					{stage == STAGE_ENTER_CODE &&
+						<>
+							<p>We are texting a code to <strong>{phoneNumber}</strong>. Enter it below to sign in.</p>
+							<p>Codes expire after 5 minutes and cannot be reused.</p>
+							<div className='sign-in-form'>
+								<input ref={codeRef} type='number' className='input' placeholder='Enter code' disabled={isLoading} />
+								<button className='button' disabled={isLoading} onClick={checkCode}>Verify</button>
+							</div>
+							<br />
+							<br />
+							<button className='button' onClick={startOver}>Start Over</button>
+						</>}
+				</>
+				<>
+					{stage == STAGE_VERIFY_CODE &&
+						<>
+							<p>Verifying code...</p>
+						</>}
+				</>
+				<>
+					{stage == STAGE_SIGNED_IN &&
+						<>
+							<p>You are signed in as <strong>{phoneNumber}</strong></p>
+							<br />
+							<div className='buttons'>
+								<button className='button' onClick={manageAlerts}>Manage Alerts</button>
+								<button className='button' onClick={signOut}>Sign out</button>
+							</div>
+						</>}
+				</>
+			</Modal>
+			<Modal title='Manage alerts' isOpen={isManageAlertsOpen} onClose={() => setIsManageAlertsOpen(false)}>
+				<ManageAlerts></ManageAlerts>
+			</Modal>
+		</>
+	)
+}
+
+import React, { useRef, useState } from 'react';
+import Modal from './Modal';
+
+export default function ManageAlerts() {
+	const [isCheckingAddress, setIsCheckingAddress] = useState(false);
+
+	const addressRef = useRef<HTMLInputElement>(null);
+
+	const saveAddress = async () => {
+		setIsCheckingAddress(true);
+
+		setIsCheckingAddress(false);
+	}
+
+	return (
+		<>
+			<div className='manage-alerts'>
+				<p>Enter your address below and you will receive text messages for any new demolition related permits issued within approximately 1/2 mile of it.</p>
+				<input ref={addressRef} type="text" className='input' placeholder='1234 Market St, Philadelphia PA 19103' disabled={isCheckingAddress} />
+				<br /><br />
+				<button className='button' disabled={isCheckingAddress} onClick={saveAddress}>Save</button>
+			</div>
+			<Modal title='Checking address...' isOpen={isCheckingAddress}></Modal>
+		</>
 	)
 }
 
@@ -328,24 +624,21 @@ export default function Map() {
 }
 
 import React from 'react';
+import Menu from './Menu';
 
 export default function Nav() {
 	return (
 		<div id="nav">
 			<h1 className='title has-text-light'>LocalPermits.app</h1>
 			<p className='subtitle has-text-light'>Get the lead out Philly!</p>
+			<div className='buttons'>
+				<Menu></Menu>
+			</div>
 		</div>
 	)
 }
 
-
-
 		window.addEventListener('DOMContentLoaded', () => {
-			const headRoot = ReactDOM.createRoot(document.getElementById('head'), null);
-			headRoot.render(
-				<Head />
-			)
-
 			const container = document.getElementById('root');
 			const root = ReactDOM.createRoot(container, null);
 			root.render(
