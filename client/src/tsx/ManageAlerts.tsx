@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { ApiContext } from './ApiContext';
 import Modal from './Modal';
 
 export default function ManageAlerts() {
@@ -6,9 +7,15 @@ export default function ManageAlerts() {
 
 	const addressRef = useRef<HTMLInputElement>(null);
 
-	const saveAddress = async () => {
-		setIsCheckingAddress(true);
+	const apiContext = useContext(ApiContext);
 
+	const saveAddress = async () => {
+		if (!addressRef.current || !addressRef.current.value) return;
+
+		setIsCheckingAddress(true);
+		let result = await apiContext.setAddress(addressRef.current.value);
+		if (result == "") alert("There was an error saving your address in the system. Please try again later.");
+		addressRef.current.value = result;
 		setIsCheckingAddress(false);
 	}
 

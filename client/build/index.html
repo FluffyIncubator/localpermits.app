@@ -73,7 +73,7 @@ export default function Modal(props: ModalProps) {
 }
 
 export class Api {
-	private _sessionId:string = "";
+	private _sessionId: string = "";
 	get sessionId() {
 		return this._sessionId;
 	}
@@ -101,49 +101,66 @@ export class Api {
 		if (storedPhone) {
 			this._phoneNumber = storedPhone;
 		}
-
-		console.log(this);
 	}
 
 	async requestCode(phoneNumber: string): Promise<boolean> {
+		phoneNumber = phoneNumber.replace(/[^0-9]/ig, '');
+		if (phoneNumber.length !== 10) return false;
+
 		this.phoneNumber = phoneNumber;
 
-		let result = await fetch('/auth/getcode', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'Application/JSON'
-			},
-			body: JSON.stringify({
-				phone_number: phoneNumber
-			})
+		let response = await fetch('/phonenumber/' + phoneNumber, {
+			method: 'POST'
 		})
-		let data = await result.json();
 
-		return data.status && data.status == 'sent';
+		if (response.status < 200 || response.status >= 300) {
+			return false;
+		}
+
+		let data = await response.json();
+
+		return data.message == "code sent";
 	}
 
 	async checkCode(code: string): Promise<boolean> {
-		let result = await fetch('/auth/checkcode', {
-			method: 'POST',
-			headers: {
-				'Content-Type': "Application/JSON"
-			},
-			body: JSON.stringify({
-				phone_number: this.phoneNumber,
-				code: code
-			})
+		code = code.replace(/[^0-9]/ig, '');
+		if (code.length !== 6) return false;
+
+		let response = await fetch('/code/' + this.phoneNumber + "/" + code, {
+			method: 'POST'
 		});
-		let data = await result.json();
-		if (data.id) {
-			this.sessionId = data.id;
+
+		if (response.status < 200 || response.status >= 300) {
+			return false;
+		}
+
+		let data = await response.json();
+		if (data.message == "success" && data.sessionid) {
+			this.sessionId = data.sessionId;
 			return true;
 		}
+
+		
 		return false;
 	}
 
 	logOut() {
 		this.sessionId = '';
 		this.phoneNumber = '';
+	}
+
+	async setAddress(address: string): Promise<string> {
+		console.log(encodeURIComponent(address));
+		let response = await fetch('/v1/address/' + encodeURIComponent(address), {
+			method: 'POST'
+		});
+
+		if (response.status < 200 || response.status >= 300) {
+			return ""
+		}
+
+		let data = await response.json();
+		return data.address;
 	}
 }
 
@@ -329,7 +346,8 @@ export default function Menu() {
 	)
 }
 
-import React, { useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { ApiContext } from './ApiContext';
 import Modal from './Modal';
 
 export default function ManageAlerts() {
@@ -337,9 +355,15 @@ export default function ManageAlerts() {
 
 	const addressRef = useRef<HTMLInputElement>(null);
 
-	const saveAddress = async () => {
-		setIsCheckingAddress(true);
+	const apiContext = useContext(ApiContext);
 
+	const saveAddress = async () => {
+		if (!addressRef.current || !addressRef.current.value) return;
+
+		setIsCheckingAddress(true);
+		let result = await apiContext.setAddress(addressRef.current.value);
+		if (result == "") alert("There was an error saving your address in the system. Please try again later.");
+		addressRef.current.value = result;
 		setIsCheckingAddress(false);
 	}
 
