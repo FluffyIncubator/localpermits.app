@@ -61,8 +61,9 @@ export class Api {
 		}
 
 		let data = await response.json();
-		if (data.message == "success" && data.sessionid) {
+		if (data.sessionid) {
 			this.sessionId = data.sessionId;
+			console.log(this.sessionId);
 			return true;
 		}
 
