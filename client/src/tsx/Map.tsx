@@ -1,7 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
-
-var mapLoaded = false;
 
 interface QueryResponse<T> {
 	fields: {
@@ -254,9 +252,11 @@ async function StartMap() {
 }
 
 export default function Map() {
+	const isMapLoaded = useRef(false);
+
 	useEffect(() => {
-		if (!mapLoaded) {
-			mapLoaded = true;
+		if (!isMapLoaded.current) {
+			isMapLoaded.current = true;
 			StartMap();
 		}
 	})

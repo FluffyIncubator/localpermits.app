@@ -19,11 +19,21 @@ export default function ManageAlerts() {
 		setIsCheckingAddress(false);
 	}
 
+	useEffect(() => {
+		if (apiContext.sessionId && addressRef.current) {
+			apiContext.getAddress().then(address => {
+				if (addressRef.current) {
+					addressRef.current.value = address
+				}
+			});
+		}
+	})
+
 	return (
 		<>
 			<div className='manage-alerts'>
 				<p>Enter your address below and you will receive text messages for any new demolition related permits issued within approximately 1/2 mile of it.</p>
-				<input ref={addressRef} type="text" className='input' placeholder='1234 Market St, Philadelphia PA 19103' disabled={isCheckingAddress} />
+				<input ref={addressRef} type="text" className='input' placeholder='1234 Market St, Philadelphia PA 19107' disabled={isCheckingAddress} />
 				<br /><br />
 				<button className='button' disabled={isCheckingAddress} onClick={saveAddress}>Save</button>
 			</div>

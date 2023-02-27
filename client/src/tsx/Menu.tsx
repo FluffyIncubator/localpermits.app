@@ -25,12 +25,11 @@ export default function Menu() {
 		if (initialLoadRef.current) {
 			initialLoadRef.current = false;
 
-			if (apiContext.phoneNumber) {
-				setPhoneNumber(apiContext.phoneNumber);
-			}
-
 			if (apiContext.sessionId) {
-				setStage(STAGE_SIGNED_IN);
+				apiContext.getPhoneNumber().then(phoneNumber => {
+					setPhoneNumber(phoneNumber);
+					setStage(STAGE_SIGNED_IN);
+				});
 			}
 		}
 	})

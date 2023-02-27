@@ -4,29 +4,57 @@ export class Api {
 		return this._sessionId;
 	}
 	set sessionId(newValue: string) {
-		localStorage.setItem('api-session-id', newValue);
+		if (typeof newValue !== 'undefined') {
+			localStorage.setItem('api-session-id', newValue);
+		}
 		this._sessionId = newValue;
 	}
 
-	private _phoneNumber = "";
-	get phoneNumber() {
-		return this._phoneNumber;
-	}
-	set phoneNumber(newPhone: string) {
-		localStorage.setItem('api-phone-number', newPhone);
-		this._phoneNumber = newPhone;
-	}
+	phoneNumber: string = "";
 
 	constructor() {
 		let storedSessionId = localStorage.getItem('api-session-id');
+
 		if (storedSessionId) {
-			this._sessionId = storedSessionId;
+			storedSessionId = storedSessionId.replace(/[^a-z0-9\-]/ig, '');
+
+			if (storedSessionId.length == 36) {
+				this._sessionId = storedSessionId;
+			}
+		}
+	}
+
+	private async fetchWithSessionId(url: string, method: string, body?: any): Promise<Response> {
+		let opts: RequestInit = {
+			method,
+			headers: {
+				'X-Session-Id': this.sessionId
+			}
 		}
 
-		let storedPhone = localStorage.getItem('api-phone-number');
-		if (storedPhone) {
-			this._phoneNumber = storedPhone;
+		if (typeof body == 'object' && opts.headers) {
+			opts.headers['Content-Type'] = 'Application/JSON';
+			opts.body = JSON.stringify(body);
 		}
+
+		let response = await fetch(url, opts);
+
+		return response;
+	}
+
+	async getPhoneNumber(): Promise<string> {
+		if (!this.sessionId) {
+			return "";
+		}
+
+		let response = await this.fetchWithSessionId('/v1/phonenumber', 'GET');
+		if (response.status < 200 || response.status >= 300) {
+			return "";
+		}
+
+		let {phonenumber} = await response.json();
+		this.phoneNumber = phonenumber;
+		return phonenumber;
 	}
 
 	async requestCode(phoneNumber: string): Promise<boolean> {
@@ -62,12 +90,12 @@ export class Api {
 
 		let data = await response.json();
 		if (data.sessionid) {
-			this.sessionId = data.sessionId;
+			this.sessionId = data.sessionid;
 			console.log(this.sessionId);
 			return true;
 		}
 
-		
+
 		return false;
 	}
 
@@ -76,11 +104,25 @@ export class Api {
 		this.phoneNumber = '';
 	}
 
+	async getAddress(): Promise<string> {
+		if (!this.sessionId) {
+			return ""
+		}
+
+		let response = await this.fetchWithSessionId('/v1/address', 'GET')
+		if (response.status < 200 || response.status >= 300) {
+			return "";
+		}
+
+		let {address} = await response.json();
+		return address;
+	}
 	async setAddress(address: string): Promise<string> {
-		console.log(encodeURIComponent(address));
-		let response = await fetch('/v1/address/' + encodeURIComponent(address), {
-			method: 'POST'
-		});
+		if (!this.sessionId) {
+			return ""
+		}
+
+		let response = await this.fetchWithSessionId('/v1/address', 'POST', {address})
 
 		if (response.status < 200 || response.status >= 300) {
 			return ""
