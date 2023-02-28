@@ -37,41 +37,6 @@
 		
 		
 
-import React, { ReactElement, useEffect, useState } from 'react';
-
-interface ModalProps {
-	title: string;
-	children?: ReactElement | ReactElement[];
-	isOpen?: boolean;
-	onClose?: () => void;
-}
-
-export default function Modal(props: ModalProps) {
-	const [isOpen, setIsOpen] = useState(false);
-
-	useEffect(() => {
-		if (typeof props.isOpen !== 'undefined') setIsOpen(props.isOpen);
-	}, [props]);
-
-	return (
-		<>
-			{isOpen &&
-				<div className='modal'>
-					<div className='modal-window'>
-						<header className='modal-head'>
-							<h2 className='title is-size-5'>{props.title}</h2>
-							{props.onClose &&
-								<button className='button is-size-7' onClick={props.onClose}>close</button>}
-						</header>
-						<div className='modal-body'>
-							{props.children}
-						</div>
-					</div>
-				</div>}
-		</>
-	)
-}
-
 export class Api {
 	private _sessionId: string = "";
 	get sessionId() {
@@ -212,20 +177,82 @@ import { Api } from "./Api";
 
 export var ApiContext = createContext(new Api())
 
-import React from 'react';
-import { Api } from './Api';
-import { ApiContext } from './ApiContext';
-import Map from './Map';
-import Nav from './Nav';
+import React, { ReactElement, useEffect, useState } from 'react';
 
-export default function Main() {
+interface ModalProps {
+	title: string;
+	children?: ReactElement | ReactElement[];
+	isOpen?: boolean;
+	onClose?: () => void;
+}
+
+export default function Modal(props: ModalProps) {
+	const [isOpen, setIsOpen] = useState(false);
+
+	useEffect(() => {
+		if (typeof props.isOpen !== 'undefined') setIsOpen(props.isOpen);
+	}, [props]);
+
 	return (
-		<div className='main'>
-			<ApiContext.Provider value={new Api()}>
-				<Nav></Nav>
-				<Map></Map>
-			</ApiContext.Provider>
-		</div>
+		<>
+			{isOpen &&
+				<div className='modal'>
+					<div className='modal-window'>
+						<header className='modal-head'>
+							<h2 className='title is-size-5'>{props.title}</h2>
+							{props.onClose &&
+								<button className='button is-size-7' onClick={props.onClose}>close</button>}
+						</header>
+						<div className='modal-body'>
+							{props.children}
+						</div>
+					</div>
+				</div>}
+		</>
+	)
+}
+
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { ApiContext } from './ApiContext';
+import Modal from './Modal';
+
+export default function ManageAlerts() {
+	const [isCheckingAddress, setIsCheckingAddress] = useState(false);
+
+	const addressRef = useRef<HTMLInputElement>(null);
+
+	const apiContext = useContext(ApiContext);
+
+	const saveAddress = async () => {
+		if (!addressRef.current || !addressRef.current.value) return;
+
+		setIsCheckingAddress(true);
+		let result = await apiContext.setAddress(addressRef.current.value);
+		if (result == "") alert("There was an error saving your address in the system. Please try again later.");
+		addressRef.current.value = result;
+		setIsCheckingAddress(false);
+	}
+
+	useEffect(() => {
+		if (apiContext.sessionId && addressRef.current) {
+			apiContext.getAddress().then(address => {
+				if (addressRef.current) {
+					addressRef.current.value = address
+				}
+			});
+		}
+	})
+
+	return (
+		<>
+			<div className='manage-alerts'>
+				<p>Enter your address below and you will receive text messages for any new demolition related permits issued within approximately 1/2 mile of it.</p>
+				<input ref={addressRef} type="text" className='input' placeholder='1234 Market St, Philadelphia PA 19107' disabled={isCheckingAddress} />
+				<br /><br />
+				<button className='button' disabled={isCheckingAddress} onClick={saveAddress}>Save</button>
+			</div>
+			<Modal title='Checking address...' isOpen={isCheckingAddress}></Modal>
+		</>
 	)
 }
 
@@ -384,50 +411,6 @@ export default function Menu() {
 			<Modal title='Manage alerts' isOpen={isManageAlertsOpen} onClose={() => setIsManageAlertsOpen(false)}>
 				<ManageAlerts></ManageAlerts>
 			</Modal>
-		</>
-	)
-}
-
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import { ApiContext } from './ApiContext';
-import Modal from './Modal';
-
-export default function ManageAlerts() {
-	const [isCheckingAddress, setIsCheckingAddress] = useState(false);
-
-	const addressRef = useRef<HTMLInputElement>(null);
-
-	const apiContext = useContext(ApiContext);
-
-	const saveAddress = async () => {
-		if (!addressRef.current || !addressRef.current.value) return;
-
-		setIsCheckingAddress(true);
-		let result = await apiContext.setAddress(addressRef.current.value);
-		if (result == "") alert("There was an error saving your address in the system. Please try again later.");
-		addressRef.current.value = result;
-		setIsCheckingAddress(false);
-	}
-
-	useEffect(() => {
-		if (apiContext.sessionId && addressRef.current) {
-			apiContext.getAddress().then(address => {
-				if (addressRef.current) {
-					addressRef.current.value = address
-				}
-			});
-		}
-	})
-
-	return (
-		<>
-			<div className='manage-alerts'>
-				<p>Enter your address below and you will receive text messages for any new demolition related permits issued within approximately 1/2 mile of it.</p>
-				<input ref={addressRef} type="text" className='input' placeholder='1234 Market St, Philadelphia PA 19107' disabled={isCheckingAddress} />
-				<br /><br />
-				<button className='button' disabled={isCheckingAddress} onClick={saveAddress}>Save</button>
-			</div>
-			<Modal title='Checking address...' isOpen={isCheckingAddress}></Modal>
 		</>
 	)
 }
@@ -710,6 +693,23 @@ export default function Nav() {
 			<div className='buttons'>
 				<Menu></Menu>
 			</div>
+		</div>
+	)
+}
+
+import React from 'react';
+import { Api } from './Api';
+import { ApiContext } from './ApiContext';
+import Map from './Map';
+import Nav from './Nav';
+
+export default function Main() {
+	return (
+		<div className='main'>
+			<ApiContext.Provider value={new Api()}>
+				<Nav></Nav>
+				<Map></Map>
+			</ApiContext.Provider>
 		</div>
 	)
 }
