@@ -30,6 +30,9 @@ export default function Menu() {
 					setPhoneNumber(phoneNumber);
 					setStage(STAGE_SIGNED_IN);
 				});
+				apiContext.getCoords().then(coords => {
+					console.log("Received coords:" + coords.join(' x '));
+				})
 			}
 		}
 	})

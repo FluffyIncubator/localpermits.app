@@ -131,4 +131,19 @@ export class Api {
 		let data = await response.json();
 		return data.address;
 	}
+
+	async getCoords(): Promise<number[]> {
+		if (!this.sessionId) {
+			return []
+		}
+
+		let response = await this.fetchWithSessionId('/v1/coords', 'GET');
+
+		if (response.status < 200 || response.status >= 300) {
+			return []
+		}
+
+		let data = await response.json();
+		return data.coords;
+	}
 }
