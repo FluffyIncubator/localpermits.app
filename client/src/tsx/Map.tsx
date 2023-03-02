@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useContext, useEffect, useRef } from 'react';
 import L from 'leaflet';
+import { ApiContext } from './ApiContext';
 
 interface QueryResponse<T> {
 	fields: {
@@ -94,7 +95,9 @@ async function getDemoPermits() {
 	return permits;
 }
 
-async function StartMap() {
+var maps: { [key: string]: L.Map } = {};
+
+async function StartMap(mapId: string) {
 	const urlSearchParams = new URLSearchParams(window.location.search);
 	const requestedPermit = urlSearchParams.get('p');
 	const dangerZoneLocation = urlSearchParams.get('dz');
@@ -129,7 +132,7 @@ async function StartMap() {
 		popupAnchor: [0, -36]
 	});
 
-	let map = L.map('map').setView([39.952583, -75.165222], 12);
+	let map = L.map(mapId).setView([39.952583, -75.165222], 12);
 
 	L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
 		attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> <strong><a href="https://www.mapbox.com/map-feedback/" target="_blank">Improve this map</a></strong>',
@@ -249,18 +252,42 @@ async function StartMap() {
 	if (targetPermit) {
 		targetPermit.openPopup()
 	}
+
+	console.log('store map ' + mapId);
+	maps[mapId] = map;
+}
+
+function zoomTo(mapId: string, lnglat: number[]) {
+	console.log('zoom map ' + mapId);
+
+	if (typeof maps[mapId] == 'undefined') return
+
+	let map = maps[mapId];
+	map.flyTo([lnglat[1], lnglat[0]], 17);
 }
 
 export default function Map() {
 	const isMapLoaded = useRef(false);
+	const apiContext = useContext(ApiContext);
+	const mapIdRef = useRef("map-" + Math.random().toFixed(10))
+	const callback = (lnglat: number[]) => {
+		console.log("onGetCoords: " + lnglat.join(','));
+		setTimeout(() => {
+			zoomTo(mapIdRef.current, lnglat);
+		}, 1000);
+	}
 
 	useEffect(() => {
+		apiContext.onGetCoords(callback)
 		if (!isMapLoaded.current) {
 			isMapLoaded.current = true;
-			StartMap();
+			StartMap(mapIdRef.current);
+		}
+		return () => {
+			apiContext.removeOnGetCoords(callback);
 		}
 	})
 	return (
-		<div id="map"></div>
+		<div id={mapIdRef.current} className="map"></div>
 	)
 }

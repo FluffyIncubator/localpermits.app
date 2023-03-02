@@ -1,3 +1,5 @@
+type GetCoordsCallback = (lnglat: number[]) => void;
+
 export class Api {
 	private _sessionId: string = "";
 	get sessionId() {
@@ -52,7 +54,7 @@ export class Api {
 			return "";
 		}
 
-		let {phonenumber} = await response.json();
+		let { phonenumber } = await response.json();
 		this.phoneNumber = phonenumber;
 		return phonenumber;
 	}
@@ -114,7 +116,7 @@ export class Api {
 			return "";
 		}
 
-		let {address} = await response.json();
+		let { address } = await response.json();
 		return address;
 	}
 	async setAddress(address: string): Promise<string> {
@@ -122,7 +124,7 @@ export class Api {
 			return ""
 		}
 
-		let response = await this.fetchWithSessionId('/v1/address', 'POST', {address})
+		let response = await this.fetchWithSessionId('/v1/address', 'POST', { address })
 
 		if (response.status < 200 || response.status >= 300) {
 			return ""
@@ -144,6 +146,23 @@ export class Api {
 		}
 
 		let data = await response.json();
+		
+		this._runOnGetCoords(data.coords);
+
 		return data.coords;
+	}
+
+	private _getCoordsCbs: Array<GetCoordsCallback> = [];
+
+	async onGetCoords(cb: GetCoordsCallback) {
+		this._getCoordsCbs.push(cb)
+	}
+
+	async removeOnGetCoords(cb: GetCoordsCallback) {
+		this._getCoordsCbs.splice(this._getCoordsCbs.indexOf(cb), 1);
+	}
+
+	private _runOnGetCoords(lnglat: number[]) {
+		this._getCoordsCbs.forEach(cb => cb(lnglat));
 	}
 }

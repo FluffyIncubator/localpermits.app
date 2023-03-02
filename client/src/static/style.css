@@ -50,11 +50,11 @@ body {
 	margin-left: auto;
 }
 
-#map {
+.map {
 	flex-grow: 2;
 }
 
-#map .button.is-primary {
+.map .button.is-primary {
 	background-color: red;
 }
 
