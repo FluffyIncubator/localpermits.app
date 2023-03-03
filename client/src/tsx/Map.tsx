@@ -33,6 +33,37 @@ interface CEProperties {
 	children?: HTMLElement[];
 }
 
+
+var youIcon = L.icon({
+	iconUrl: "/red-marker-icon.png",
+	shadowUrl: "/marker-shadow.png",
+	iconSize: [25, 41],
+	shadowSize: [41, 41],
+	iconAnchor: [13, 41],
+	shadowAnchor: [13, 40],
+	popupAnchor: [0, -36]
+});
+
+var demoIcon = L.icon({
+	iconUrl: "/demo-active.png",
+	shadowUrl: "/marker-shadow.png",
+	iconSize: [25, 41],
+	shadowSize: [41, 41],
+	iconAnchor: [13, 41],
+	shadowAnchor: [13, 40],
+	popupAnchor: [0, -36]
+});
+
+var plumbingIcon = L.icon({
+	iconUrl: "/plumbing-active.png",
+	shadowUrl: "/marker-shadow.png",
+	iconSize: [25, 41],
+	shadowSize: [41, 41],
+	iconAnchor: [13, 41],
+	shadowAnchor: [13, 40],
+	popupAnchor: [0, -36]
+});
+
 function CE(properties: CEProperties) {
 	let el = document.createElement(properties.tagName);
 	if (properties) {
@@ -101,36 +132,6 @@ async function StartMap(mapId: string) {
 	const urlSearchParams = new URLSearchParams(window.location.search);
 	const requestedPermit = urlSearchParams.get('p');
 	const dangerZoneLocation = urlSearchParams.get('dz');
-
-	let youIcon = L.icon({
-		iconUrl: "/red-marker-icon.png",
-		shadowUrl: "/marker-shadow.png",
-		iconSize: [25, 41],
-		shadowSize: [41, 41],
-		iconAnchor: [13, 41],
-		shadowAnchor: [13, 40],
-		popupAnchor: [0, -36]
-	});
-
-	let demoIcon = L.icon({
-		iconUrl: "/demo-active.png",
-		shadowUrl: "/marker-shadow.png",
-		iconSize: [25, 41],
-		shadowSize: [41, 41],
-		iconAnchor: [13, 41],
-		shadowAnchor: [13, 40],
-		popupAnchor: [0, -36]
-	});
-
-	let plumbingIcon = L.icon({
-		iconUrl: "/plumbing-active.png",
-		shadowUrl: "/marker-shadow.png",
-		iconSize: [25, 41],
-		shadowSize: [41, 41],
-		iconAnchor: [13, 41],
-		shadowAnchor: [13, 40],
-		popupAnchor: [0, -36]
-	});
 
 	let map = L.map(mapId).setView([39.952583, -75.165222], 12);
 
@@ -255,36 +256,109 @@ async function StartMap(mapId: string) {
 
 	console.log('store map ' + mapId);
 	maps[mapId] = map;
+
+	runQueue(mapId);
+}
+
+function addHomeZone(mapId: string, lnglat: number[], address: string) {
+	if (typeof maps[mapId] == 'undefined') {
+		queueAction(mapId, () => {
+			addHomeZone(mapId, lnglat, address);
+		});
+		return;
+	}
+
+	let map = maps[mapId];
+	L.rectangle([[lnglat[1] - 0.004, lnglat[0] - 0.005], [lnglat[1] + 0.004, lnglat[0] + 0.005]], {
+		color: "#ff3333",
+		weight: 4
+	}).addTo(map);
+
+	L.marker([lnglat[1], lnglat[0]], {
+		icon: youIcon
+	}).addTo(map).bindTooltip(address);
+
+	zoomTo(mapId, lnglat);
 }
 
 function zoomTo(mapId: string, lnglat: number[]) {
 	console.log('zoom map ' + mapId);
 
-	if (typeof maps[mapId] == 'undefined') return
+	if (typeof maps[mapId] == 'undefined') {
+		queueAction(mapId, () => {
+			zoomTo(mapId, lnglat);
+		})
+		return
+	}
 
 	let map = maps[mapId];
 	map.flyTo([lnglat[1], lnglat[0]], 17);
+}
+
+type AnyCallback = () => any;
+
+var mapActionQueue: { [mapId: string]: Array<AnyCallback> } = {};
+
+function queueAction(mapId: string, cb: AnyCallback) {
+	if (typeof mapActionQueue[mapId] == 'undefined') {
+		mapActionQueue[mapId] = [];
+	}
+	mapActionQueue[mapId].push(cb);
+	console.log('Action queued for ' + mapId)
+}
+
+function runQueue(mapId: string) {
+	if (typeof mapActionQueue[mapId] == 'undefined') return;
+
+	while (mapActionQueue[mapId].length > 0) {
+		let cb = mapActionQueue[mapId].pop();
+		cb && cb();
+	}
+
+	delete mapActionQueue[mapId];
 }
 
 export default function Map() {
 	const isMapLoaded = useRef(false);
 	const apiContext = useContext(ApiContext);
 	const mapIdRef = useRef("map-" + Math.random().toFixed(10))
-	const callback = (lnglat: number[]) => {
-		console.log("onGetCoords: " + lnglat.join(','));
-		setTimeout(() => {
-			zoomTo(mapIdRef.current, lnglat);
-		}, 1000);
+	const homeAddress = useRef("");
+	const homeCoords = useRef([] as number[]);
+
+	const coordsCb = (lnglat: number[]) => {
+		if (lnglat.length != 2) return;
+
+		homeCoords.current = lnglat;
+		console.log('got coords', lnglat);
+
+		if (homeCoords.current.length == 2 && homeAddress.current.length > 0) {
+			addHomeZone(mapIdRef.current, homeCoords.current, homeAddress.current);
+		}
+	}
+
+	const addressCb = (address: string) => {
+		if (address.length == 0) return;
+
+		homeAddress.current = address;
+		console.log('got address', address);
+
+		if (homeCoords.current.length == 2 && homeAddress.current.length > 0) {
+			addHomeZone(mapIdRef.current, homeCoords.current, homeAddress.current);
+		}
 	}
 
 	useEffect(() => {
-		apiContext.onGetCoords(callback)
+		apiContext.on('getcoords', coordsCb);
+		apiContext.on('getaddress', addressCb);
+
 		if (!isMapLoaded.current) {
 			isMapLoaded.current = true;
 			StartMap(mapIdRef.current);
+			apiContext.getAddress();
 		}
 		return () => {
-			apiContext.removeOnGetCoords(callback);
+			apiContext.remove('getcoords', coordsCb);
+			apiContext.remove('getaddress', addressCb);
 		}
 	})
 	return (

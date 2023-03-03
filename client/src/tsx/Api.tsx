@@ -13,6 +13,8 @@ export class Api {
 	}
 
 	phoneNumber: string = "";
+	coords: number[] = [];
+	address: string = "";
 
 	constructor() {
 		let storedSessionId = localStorage.getItem('api-session-id');
@@ -117,6 +119,9 @@ export class Api {
 		}
 
 		let { address } = await response.json();
+		this.address = address;
+		this.run('getaddress', this.address);
+
 		return address;
 	}
 	async setAddress(address: string): Promise<string> {
@@ -131,6 +136,9 @@ export class Api {
 		}
 
 		let data = await response.json();
+		this.address = data.address;
+		this.run('getaddress', this.address);
+
 		return data.address;
 	}
 
@@ -147,22 +155,27 @@ export class Api {
 
 		let data = await response.json();
 		
-		this._runOnGetCoords(data.coords);
+
+		this.coords = data.coords;
+		this.run('getcoords', this.coords);
 
 		return data.coords;
 	}
 
-	private _getCoordsCbs: Array<GetCoordsCallback> = [];
+	private _callbacks: { [actionName: string]: Array<(...any)=>void>; } = {};
 
-	async onGetCoords(cb: GetCoordsCallback) {
-		this._getCoordsCbs.push(cb)
+	async on(action: ActionTypes, cb: (...any)=>void) {
+		this._callbacks[action] || (this._callbacks[action] = []);
+		this._callbacks[action].push(cb);
 	}
 
-	async removeOnGetCoords(cb: GetCoordsCallback) {
-		this._getCoordsCbs.splice(this._getCoordsCbs.indexOf(cb), 1);
+	async remove(action: ActionTypes, cb: any) {
+		this._callbacks[action] && this._callbacks[action].splice(this._callbacks[action].indexOf(cb), 1);
 	}
 
-	private _runOnGetCoords(lnglat: number[]) {
-		this._getCoordsCbs.forEach(cb => cb(lnglat));
+	async run(action: ActionTypes, ...args) {
+		this._callbacks[action] && this._callbacks[action].forEach(cb => cb(...args));
 	}
 }
+
+type ActionTypes = 'getcoords' | 'getaddress';
