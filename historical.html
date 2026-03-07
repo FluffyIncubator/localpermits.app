@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocalPermits.app</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script src="/static/js/heatmap.min.js"></script>
+    <script src="/static/js/leaflet-heatmap.js"></script>
+
+    <link rel="stylesheet" href="/css/main.css" />
+    <style type="text/css">
+        #caption {
+            position: fixed;
+            bottom: 1em;
+            left: 1em;
+            right: 1em;
+            background-color: #333;
+            z-index: 99999;
+            padding: 1em;
+            border-radius: 1em;
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #caption .title {
+            font-size: 150%;
+            margin-bottom: 0.5em;
+        }
+
+        #caption a {
+            display: block;
+            border: 1px solid #0c0;
+            padding: 0.5em;
+            color: #ccc;
+            text-decoration: none;
+            text-align: center;
+            border-radius: 0.5em;
+            margin-left: 1em;
+        }
+
+        .legend {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            margin-top: 1em;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="header">
+        <a href="/">LocalPermits.app</a>
+        <a href="sub.html"><small
+                style="font-size: 16px; border: 1px solid #0c0; padding: 0.5em; margin: 0.5em; border-radius: 0.5em;">Manage
+                Alerts</small></a>
+    </div>
+    <div id="map"></div>
+
+    <div id="popup" class="curtain hidden">
+        <div class="modal">
+            <p>
+                Click MANAGE ALERTS to set up demo alerts! You'll receive a text message when the system can detect a
+                permit is issued near your home that may be related to demolition!
+            </p>
+            <button id="dismiss-popup">Dismiss</button>
+        </div>
+    </div>
+
+    <div id="caption">
+        <div class="content">
+            <div class="title">Historical View</div> This is a weighted heatmap of where demolitions have happened and
+            are happening in the city going back to approximately 2007. More recent demos are weighted much more heavily
+            than older ones.
+            <br />
+            <div class="legend">
+                <img src="/static/img/plumbing-active.png" /> = Division of Housing and Community Development affordable housing site.
+            </div>
+        </div>
+        <a href="/">Back to Current Map</a>
+    </div>
+    <script type="text/javascript">
+        async function main() {
+            async function getAffordableHousing() {
+                let res = await fetch("/static/Affordable_Housing.geojson")
+                let data = await res.json();
+                let coords = data.features.filter(f => f.geometry && f.geometry.coordinates).map(f => {
+                    return {
+                        coords: [f.geometry.coordinates[1], f.geometry.coordinates[0]],
+                        total_units: f.properties.TOTAL_UNITS
+                    }
+                })
+                return coords;
+            }
+
+            function getHeatmap(data) {
+                var cfg = {
+                    // radius should be small ONLY if scaleRadius is true (or small radius is intended)
+                    "radius": 0.003,
+                    "maxOpacity": .6,
+                    // scales the radius based on map zoom
+                    "scaleRadius": true,
+                    // if set to false the heatmap uses the global maximum for colorization
+                    // if activated: uses the data maximum within the current map boundaries 
+                    //   (there will always be a red spot with useLocalExtremas true)
+                    "useLocalExtrema": false,
+                    // which field name in your data represents the latitude - default "lat"
+                    latField: 'lat',
+                    // which field name in your data represents the longitude - default "lng"
+                    lngField: 'lng',
+                    // which field name in your data represents the data value - default "value"
+                    valueField: 'count'
+                };
+
+                var heatmapLayer = new HeatmapOverlay(cfg);
+                heatmapLayer.setData({
+                    max: 200000,
+                    data: data.rows
+                });
+                return heatmapLayer;
+            }
+
+            function CE(properties) {
+                let el = document.createElement(properties.tagName);
+                if (properties) {
+                    if (properties.id) el.setAttribute('id', properties.id);
+                    if (properties.classList) properties.classList.forEach(c => el.classList.add(c));
+                    if (properties.text) el.appendChild(document.createTextNode(properties.text));
+                    if (properties.children) properties.children.forEach(child => el.appendChild(child));
+                }
+                return el;
+            }
+
+            function runQuery(query) {
+                return new Promise((resolve, reject) => {
+                    let xhr = new XMLHttpRequest();
+                    let url = 'https://phl.carto.com/api/v2/sql?q=' + encodeURIComponent(query.replace(/\n/ig, ' '));
+                    console.log(url);
+                    xhr.open('GET', url);
+                    xhr.onload = function () {
+                        let response = JSON.parse(this.responseText);
+                        resolve(response);
+                    }
+                    xhr.send();
+                });
+            }
+
+            async function getMapAccessToken() {
+                const res = await fetch('/api/v1/mapbox-token');
+                if (!res.ok) {
+                    console.error('Failed to fetch map access token', res.status);
+                    throw new Error('Failed to fetch map access token');
+                }
+                const data = await res.json();
+                return data.accessToken || data.token;
+            }
+
+            async function getDemoPermits() {
+                let permits = await runQuery(`
+                SELECT 
+                    permitnumber,
+                    permittype,
+                    address,
+                    status,
+                    approvedscopeofwork,
+                    permitissuedate,
+                    st_y(the_geom) as lat,
+                    st_x(the_geom) as lng,
+                    (149000 - extract (epoch FROM current_date - permitissuedate)/3600) as count
+                FROM
+                    permits
+                WHERE
+                    (
+                        status = 'ACTIVE'
+                        OR status = 'ISSUED'
+                        OR status = 'COMPLETED'
+                    )
+                    AND (
+                        permittype = 'DEMOLITION'
+                        OR permittype = 'BP_DEMO'
+                        OR approvedscopeofwork LIKE '%SEAL%LATERAL%'
+                        OR approvedscopeofwork LIKE '%LATERAL%SEAL%'
+                    )
+                ORDER BY
+                        permitissuedate DESC
+            `);
+
+                return permits;
+            }
+
+            let youIcon = L.icon({
+                iconUrl: "/static/img/red-marker-icon.png",
+                shadowUrl: "/static/img/marker-shadow.png",
+                iconSize: [25, 41],
+                shadowSize: [41, 41],
+                iconAnchor: [13, 41],
+                shadowAnchor: [13, 40],
+                popupAnchor: [0, -36]
+            });
+
+            let homeIcon = L.icon({
+                iconUrl: "/static/img/home-icon.png",
+                shadowUrl: "/static/img/marker-shadow.png",
+                iconSize: [25, 41],
+                shadowSize: [41, 41],
+                iconAnchor: [13, 41],
+                shadowAnchor: [13, 40],
+                popupAnchor: [0, -36]
+            });
+
+            let map = L.map('map').setView([39.952583, -75.165222], 15);
+
+            const accessToken = await getMapAccessToken();
+
+            L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
+                attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> <strong><a href="https://www.mapbox.com/map-feedback/" target="_blank">Improve this map</a></strong>',
+                tileSize: 512,
+                maxZoom: 18,
+                zoomOffset: -1,
+                id: 'mapbox/streets-v11',
+                accessToken: accessToken
+            }).addTo(map);
+
+            let youMarker = null;
+
+            function handleGpsUpdateSuccess(position) {
+                if (youMarker) {
+                    youMarker.removeFrom(map);
+                }
+
+                youMarker = L.marker([position.coords.latitude, position.coords.longitude], {
+                    icon: youIcon
+                }).addTo(map);
+
+                map.setView([position.coords.latitude, position.coords.longitude], 17);
+            }
+
+            function handleGpsUpdateError(err) {
+                console.log(err);
+            };
+
+            async function addHome() {
+                let sessionId = localStorage.getItem('session_id');
+                if (!sessionId) return;
+
+                let res = await fetch(`/api/v1/sub/${sessionId}`);
+                let data = await res.json();
+
+                if (Math.abs(data.lat) > 0 && Math.abs(data.lng) > 0) {
+                    L.circle([data.lat, data.lng], 400, {
+                        color: 'green',
+                        opacity: 0.25,
+                        stroke: false
+                    }).addTo(map);
+                    L.marker([data.lat, data.lng], {
+                        icon: homeIcon
+                    }).addTo(map);
+                }
+            }
+
+            navigator.geolocation.getCurrentPosition(handleGpsUpdateSuccess, handleGpsUpdateError);
+
+            addHome();
+
+            let permits = await getDemoPermits();
+
+            getHeatmap(permits).addTo(map);
+
+            let affordableHousingLocs = await getAffordableHousing();
+            for (let a of affordableHousingLocs) {
+                L.marker(a.coords).addTo(map).bindPopup(a.total_units + ' affordable unit' + (a.total_units > 1 ? 's' : ''));
+            }
+        }
+
+        main();
+
+        function dismissPopup() {
+            localStorage.setItem('popup-dismissed', 'true');
+            document.getElementById('popup').classList.add('hidden');
+            console.log('clicky clicky');
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('dismiss-popup').addEventListener('click', dismissPopup);
+
+            let popupDismissed = localStorage.getItem('popup-dismissed');
+            if (popupDismissed != 'true') {
+                document.getElementById('popup').classList.remove('hidden');
+            }
+        })
+    </script>
+</body>
+
+</html>

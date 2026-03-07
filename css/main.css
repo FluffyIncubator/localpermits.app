@@ -1,0 +1,119 @@
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #333;
+    color: #f0f0f0;
+    font-family: sans-serif;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: stretch;
+}
+
+#header {
+    height: 5vh;
+    display: flex;
+    padding: 1em;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    color: #f0f0f0;
+    font-size: 150%;
+}
+
+#header a {
+    text-decoration: none;
+    color: #f0f0f0;
+}
+
+#map {
+    height: 95vh;
+}
+
+#content-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+#content {
+    padding: 1em;
+    display: flex;
+    width: 100vw;
+    max-width: 600px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    margin-left: auto;
+    margin-right: auto;
+    border: 1px dotted #f0f0f0;
+}
+
+#content > section {
+    margin: 1em;
+    padding: 1em;
+    border: 1px solid #f0f0f0;
+}
+
+#content > section input {
+    width: 100%;
+}
+
+#content > section button, #content > section input {
+    padding: 0.5em;
+}
+
+#content > section.success {
+    border: 1px solid #00ff00;
+}
+
+.flex-column {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.flex-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: stretch;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.curtain {
+    position: fixed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.25);
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+}
+
+.curtain > .modal {
+    max-width: 95vw;
+    min-width: 25vw;
+
+    max-height: 95vh;
+    min-height: 25vh;
+
+    padding: 1em;
+    background-color: white;
+    color: #333;
+    border-radius: 1em;
+}

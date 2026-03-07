@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocalPermits.app - manage alerts</title>
+
+    <link rel="stylesheet" href="/css/main.css" />
+
+    <script type="text/javascript">
+        
+        var sub = {
+            session_id: "",
+            address: "",
+            phone_number: "",
+            lat: 0.00,
+            lng: 0.00
+        };
+
+        function showCodeEntry() {
+            document.querySelector('.code-entry-blurb').classList.add('hidden');
+            document.querySelector('.code-entry').classList.remove('hidden');
+        }
+
+        function updateSub(data) {
+            ['session_id', 'address', 'phone_number', 'lat', 'lng'].forEach(key => {
+                if (typeof data[key] != 'undefined') {
+                    sub[key] = data[key];
+                }
+            });
+
+            if (Math.abs(sub.lat) > 0 && Math.abs(sub.lng) > 0) {
+                getNearbyPermits(sub.lat, sub.lng).then((permits) => {
+                    let el = document.getElementById('nearby-permits');
+                    el.innerHTML = '<h1>Nearby Permits</h1>';
+
+                    for (let permit of permits.rows) {
+                        el.innerHTML += `
+                            <div style="background-color: #ccc; color: #333; margin: 0.5em; padding: 0.5em;">
+                                <p style="display: flex; flex-direction: row; justify-content: space-between;">
+                                    <strong>${permit.address}</strong> <small>${permit.permitissuedate}</small>
+                                </p>
+                                <p style="display: flex; flex-direction: row; justify-content: space-between;">
+                                    <strong>${permit.permitnumber}</strong> <strong>${permit.status}</strong>
+                                </p>
+                                <p>
+                                    Scope of work: ${permit.approvedscopeofwork}
+                                </p>
+                            </div>                        
+                        `
+                    }
+                })
+            }
+        }
+
+        function unlockInput() {
+            let els = document.querySelectorAll('input, button');
+            for (let el of els) {
+                el.disabled = false;
+            }
+        }
+
+        function lockInput() {
+            let els = document.querySelectorAll('input, button');
+            for (let el of els) {
+                el.disabled = true;
+            }
+        }
+
+        async function getNearbyPermits(lat, lng) {
+            console.log("Get permits near " + lat + ", " + lng);
+            let permits = await runQuery(`
+                SELECT 
+                    permitnumber,
+                    permittype,
+                    address,
+                    status,
+                    approvedscopeofwork,
+                    permitissuedate,
+                    ST_DistanceSphere(the_geom, ST_MakePoint(${lng},${lat})) as distance
+                FROM
+                    permits
+                WHERE
+                    (
+                        status = 'ACTIVE'
+                        OR status = 'ISSUED'
+                        OR status = 'Issued'
+                        OR status = 'Active'
+                    )
+                    AND (
+                        permittype = 'DEMOLITION'
+                        OR permittype = 'Demolition'
+                        OR permittype = 'BP_DEMO'
+                        OR approvedscopeofwork LIKE '%SEAL%LATERAL%'
+                        OR approvedscopeofwork LIKE '%LATERAL%SEAL%'
+                        OR approvedscopeofwork LIKE '%EARTH DISTURBANCE%'
+				        OR approvedscopeofwork LIKE '%EXCAVATION%'
+				        OR approvedscopeofwork LIKE '%SITE GRADING%'	                       
+                    )
+                    AND
+                    ST_DistanceSphere(the_geom, ST_MakePoint(${lng},${lat})) <= 402
+                ORDER BY
+                    permitissuedate DESC
+            `);
+
+            return permits;
+        }
+
+        function runQuery(query) {
+            return new Promise((resolve, reject) => {
+                let xhr = new XMLHttpRequest();
+                let url = 'https://phl.carto.com/api/v2/sql?q=' + encodeURIComponent(query.replace(/\n/ig, ' '));
+                xhr.open('GET', url);
+                xhr.onload = function () {
+                    let response = JSON.parse(this.responseText);
+                    resolve(response);
+                }
+                xhr.send();
+            });
+        }
+
+        function updateAccount() {
+            console.log(sub);
+            for (let key of Object.keys(sub)) {
+                let els = document.querySelectorAll(`[data-show='${key}']`);
+                for (let el of els) {
+                    if (typeof el.value != 'undefined') el.value = sub[key];
+                    else el.innerHTML = sub[key];
+                }
+            }
+        }
+
+        async function showLogin() {
+            document.getElementById('login').classList.remove('hidden')
+            document.getElementById('account').classList.add('hidden')
+        }
+
+        async function showAccount() {
+            document.getElementById('login').classList.add('hidden')
+            document.getElementById('account').classList.remove('hidden')
+            updateAccount();
+        }
+
+        async function loadSession() {
+            sub.session_id = localStorage.getItem("session_id");
+            if (!sub.session_id) {
+                let req = await fetch("/api/v1/sub", { method: "POST" });
+                let data = await req.json();
+                if (data.session_id) {
+                    sub.session_id = data.session_id
+                    localStorage.setItem('session_id', sub.session_id);
+                }
+                if (data.error) {
+                    alert(data.error);
+                }
+            }
+
+            let subReq = await fetch(`/api/v1/sub/${sub.session_id}`)
+            let data = await subReq.json();
+
+            updateSub(data);
+
+            if (data.error && data.error == "session not found") {
+                showLogin();
+                return;
+            }
+
+            if (data.error) {
+                alert(data.error);
+            }
+
+            showAccount();
+        }
+
+        async function sendCode() {
+            lockInput();
+
+            tryclaim: try {
+                let phone = document.getElementById('phone').value.replace(/[^0-9]/ig, '')
+                if (phone.length != 10) {
+                    alert("Please enter a 10 digit phone number starting with area code.");
+                    break tryclaim;
+                }
+
+                let res = await fetch(`/api/v1/sub/${sub.session_id}/phone/${phone}`, { method: "POST" });
+                let data = await res.json()
+                console.log(data);
+                if (data.message && data.message == "code sent") {
+                    console.log('CODE IS SENT!');
+                }
+            } catch (ex) {
+                console.log(ex);
+            } finally {
+                unlockInput();
+            }
+
+            showCodeEntry();
+        }
+
+        async function submitCode() {
+            lockInput();
+
+            trysubmit: try {
+                let phone = document.getElementById('phone').value.replace(/[^0-9]/ig, '')
+                if (phone.length != 10) {
+                    alert("Please enter a 10 digit phone number starting with area code.");
+                    break trysubmit;
+                }
+
+                let code = document.getElementById('code').value.replace(/[^0-9]/ig, '');
+                if (code.length != 6) {
+                    alert('The code should be 6 digits.');
+                    break trysubmit;
+                }
+
+                let res = await fetch(`/api/v1/sub/${sub.session_id}/phone/${phone}/code/${code}`, { method: "POST" })
+                let data = await res.json();
+
+                updateSub(data);
+            } catch (ex) {
+                console.log(ex)
+            } finally {
+                unlockInput();
+            }
+
+            if (sub.phone_number) {
+                showAccount();
+            }
+        }
+
+        async function deleteSub() {
+            lockInput();
+
+            trydelete: try {
+
+                if (!confirm("This will delete all your information from our system.")) {
+                    break trydelete;
+                }
+
+                let res = await fetch(`/api/v1/sub/${sub.session_id}`, { method: "DELETE" });
+                let data = await res.json();
+                console.log(data);
+                if (typeof data.error != "undefined") {
+                    alert(data.error);
+                    break trydelete;
+                } 
+
+                localStorage.clear();
+                document.location.reload();
+
+            } catch (ex) {
+                console.log(ex);
+            } finally {
+                unlockInput();
+            }
+        }
+
+        async function updateAddress() {
+            lockInput();
+            tryaddress: try {
+                let address = document.getElementById('address').value;
+                let res = await fetch(`/api/v1/sub/${sub.session_id}/address`, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        address
+                    }),
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                let data = await res.json();
+                if (data.error) {
+                    alert(data.error);
+                    break tryaddress;
+                }
+
+                updateSub(data);
+                showAccount();
+            } catch (ex) {
+                console.log(ex);
+            } finally {
+                unlockInput();
+            }
+        }
+
+        async function main() {
+            await loadSession();
+        }
+
+        window.addEventListener("DOMContentLoaded", main);
+    </script>
+
+</head>
+
+<body>
+    <div id="header">
+        <a href="/">LocalPermits.app</a>
+        <a href="sub.html"><small style="font-size: 16px; border: 1px solid #0c0; padding: 0.5em; margin: 0.5em; border-radius: 0.5em;">Manage Alerts</small></a>
+    </div>
+    <div id="content-wrapper">
+        <div id="content">
+            <section id="account" class="hidden">
+                <h1>Your Account</h1>
+                <p><strong>NOTE:</strong> By signing up with an address you are opting in to receive text messages.</p>
+                <p>You will receive text messages at the provided number when a permit is issued within 1/4 mile of the address provided that may be related to demolition.</p>
+                <p>We cannot make any promises that you will receive EVERY demo related permit and it's possible you will receive an alert about a non-demo permit.</p>
+                <p>Phone: <strong data-show="phone_number"></strong></p>
+                <p>
+                    <label for="address">Address</label>
+                    <input data-show="address" id="address" />
+                </p>
+                <p style="display: flex; flex-direction: row; justify-content: space-between;">
+                    <button onclick="updateAddress()">Save Target Address</button>
+                    <button onclick="deleteSub()">Delete Subscription</button>
+                </p>
+            </section>
+            <section id="login" class="hidden">
+                <h1>Log In</h1>
+                <p>
+                    <label for="phone">
+                        Phone Number (starting with area code, numbers only):
+                    </label>
+                    <input type="tel" id="phone" pattern="[0-9]{10}" />
+                </p>
+                <p>
+                    <button onclick="sendCode()">Send a Code</button>
+                </p>
+                <p class="code-entry-blurb"><a onclick="showCodeEntry()">Click Here</a> to enter a code.</p>
+                <div class="code-entry hidden">
+                    <p>
+                        <label for="code">
+                            Code (make sure the phone number above matches where the code was received):
+                        </label>
+                        <input type="number" id="code" />
+                    </p>
+                    <p>
+                        <button onclick="submitCode()">Submit a Code</button>
+                    </p>
+                </div>
+            </section>
+
+            <section id="nearby-permits">
+            </section>
+        </div>
+    </div>
+</body>
+
+</html>
