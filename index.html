@@ -399,7 +399,7 @@
                     let aiEl = block.querySelector('.ai-summary');
                     if (!aiEl) continue;
                     try {
-                        let res = await fetch('/permit/' + encodeURIComponent(permitNumber));
+                        let res = await fetch('/api/v1/permit/' + encodeURIComponent(permitNumber));
                         if (!res.ok || !res.body) {
                             throw new Error('Bad response from server');
                         }

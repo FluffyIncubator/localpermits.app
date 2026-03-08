@@ -2,6 +2,17 @@
     box-sizing: border-box;
 }
 
+div.popup {
+    max-height: 80vh;
+    overflow-y: scroll;
+}
+
+.ai-summary {
+    border: 1px solid #e0e0e0;
+    padding: 5px;
+    border: 5px;
+}
+
 html,
 body {
     margin: 0;
