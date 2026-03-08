@@ -336,13 +336,22 @@
                         tagName: 'div',
                         text: `${permit.approvedscopeofwork ? permit.approvedscopeofwork : 'NO DESCRIPTION OF WORK PROVIDED'}`,
                         classList: [(permit.approvedscopeofwork ? 'has-text-weight-normal' : 'has-text-weight-bold')]
-                    }))
+                    }));
 
-                    return CE({
+                    let aiSummaryEl = CE({
+                        tagName: 'div',
+                        text: 'Loading AI summary…',
+                        classList: ['ai-summary', 'has-text-weight-bold']
+                    });
+                    children.push(aiSummaryEl);
+
+                    let permitDiv = CE({
                         tagName: 'div',
                         classList: ['permit'],
                         children: children
                     });
+                    permitDiv.setAttribute('data-permitnumber', permit.permitnumber);
+                    return permitDiv;
                 });
 
 
@@ -376,6 +385,26 @@
                         if (matchingPermits.length > 0) {
                             targetPermit = thisMarker;
                         }
+                    }
+                }
+            });
+
+            map.on('popupopen', async function (e) {
+                let content = e.popup.getContent();
+                if (!content || !content.querySelectorAll) return;
+                let permitBlocks = content.querySelectorAll('.permit');
+                for (let block of permitBlocks) {
+                    let permitNumber = block.getAttribute('data-permitnumber');
+                    if (!permitNumber) continue;
+                    let aiEl = block.querySelector('.ai-summary');
+                    if (!aiEl) continue;
+                    try {
+                        let res = await fetch('/permit/' + encodeURIComponent(permitNumber));
+                        let data = await res.json();
+                        aiEl.textContent = data.demolition_related != null ? data.demolition_related : 'Summary unavailable';
+                    } catch (err) {
+                        console.error('AI summary fetch failed:', err);
+                        aiEl.textContent = 'Summary unavailable';
                     }
                 }
             });
