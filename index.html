@@ -400,8 +400,17 @@
                     if (!aiEl) continue;
                     try {
                         let res = await fetch('/permit/' + encodeURIComponent(permitNumber));
-                        let data = await res.json();
-                        aiEl.textContent = data.demolition_related != null ? data.demolition_related : 'Summary unavailable';
+                        if (!res.ok || !res.body) {
+                            throw new Error('Bad response from server');
+                        }
+                        aiEl.textContent = '';
+                        const reader = res.body.getReader();
+                        const decoder = new TextDecoder();
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            aiEl.textContent += decoder.decode(value, { stream: true });
+                        }
                     } catch (err) {
                         console.error('AI summary fetch failed:', err);
                         aiEl.textContent = 'Summary unavailable';
